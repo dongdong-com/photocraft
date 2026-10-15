@@ -11,7 +11,7 @@ use rmcp::model::{CallToolResult, ContentBlock as Content};
 use rmcp::{ErrorData as McpError, ServerHandler, ServiceExt, tool, tool_router};
 use schemars::JsonSchema;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use crate::bridge::BridgeClient;
 use crate::budgets::{BatchReplyBudget, MAX_PREVIEW_SIDE, check_png, json_bytes};
@@ -220,7 +220,7 @@ pub struct RunParams {
     pub id: String,
     /// Command parameters as a JSON object (see the `params` doc in `command_list`).
     #[serde(default)]
-    pub params: Option<Value>,
+    pub params: Option<Map<String, Value>>,
     /// Wait for a long command (filters, Content-Aware Fill, Photomerge, …) to finish (default
     /// true). With false it runs as a background job and the result is `{"job": id}`: poll it
     /// with `jobs_list`, stop it with `jobs_cancel`.
@@ -836,7 +836,7 @@ impl PhotocraftMcp {
         Long commands (filters, Content-Aware Fill/Scale, Photomerge, brush import) wait to finish unless `wait` is false: \
         then they run as a background job and the result is {job: id} (see jobs_list, jobs_cancel).")]
     async fn command_run(&self, Parameters(p): Parameters<RunParams>) -> Result<CallToolResult, McpError> {
-        self.run_command(p.id, p.params.unwrap_or_else(|| json!({})), p.wait.unwrap_or(true)).await
+        self.run_command(p.id, p.params.map(Value::Object).unwrap_or_else(|| json!({})), p.wait.unwrap_or(true)).await
     }
 
     #[tool(description = "List background jobs: running ones with progress (0-1), message and elapsed time, then the last few \
@@ -860,7 +860,7 @@ impl PhotocraftMcp {
         }
         let stop = p.stop_on_error.unwrap_or(true);
         let steps: Vec<Value> =
-            p.steps.into_iter().map(|s| json!({"command": s.id, "params": s.params.unwrap_or_else(|| json!({})), "wait": s.wait.unwrap_or(true)})).collect();
+            p.steps.into_iter().map(|s| json!({"command": s.id, "params": s.params.map(Value::Object).unwrap_or_else(|| json!({})), "wait": s.wait.unwrap_or(true)})).collect();
         let args = json!({"steps": steps, "stopOnError": stop});
         // The reply travels as escaped JSON text, so steps are charged their escaped size.
         if let Some(r) = self.headless_op(move |h| h.batch_with_budget(&args, BatchReplyBudget::escaped())).await {
